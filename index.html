@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kira AI - Document Uploader</title>
+    <style>
+        body { font-family: sans-serif; padding: 20px; line-height: 1.6; max-width: 600px; margin: auto; }
+        button { background-color: #28a745; color: white; padding: 10px 15px; border: none; border-radius: 4px; cursor: pointer; font-size: 16px; width: 100%; }
+        button:disabled { background-color: #ccc; }
+        #log { margin-top: 20px; background-color: #000; color: #0f0; padding: 10px; height: 300px; overflow-y: auto; font-family: monospace; }
+    </style>
+</head>
+<body>
+    <h1>Uploader Dokumen untuk Otak AI Kira</h1>
+    <p>Tekan tombol di bawah ini SEKALI SAJA untuk mengunggah isi <code>dokumen_perusahaan.txt</code> ke database.</p>
+    <button id="startButton">Mulai Proses Upload</button>
+    <h3>Log Proses:</h3>
+    <pre id="log">Menunggu untuk memulai...</pre>
+    <script type="module">
+        import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm';
+
+        // ▼▼▼ EDIT TIGA BARIS DI BAWAH INI ▼▼▼
+        const SUPABASE_URL = "https://vecqnclehjpnebdzjlwl.supabase.co";
+        const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZlY3FuY2xlaGpwbmViZHpqbHdsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTM3MTU2NDQsImV4cCI6MjA2OTI5MTY0NH0.zdhE23NM5sjS3dupeBFtXPzbr9sCTLd_jn5YpMQARXI";
+        const GEMINI_KEY = "AIzaSyAN-0-VI856baQLOEyzz0C9H_Nj4f54GCE";
+        // ▲▲▲ EDIT TIGA BARIS DI ATAS INI ▲▲▲
+
+        const startButton = document.getElementById('startButton');
+        const logElement = document.getElementById('log');
+
+        function log(message) { logElement.textContent += `> ${message}\n`; logElement.scrollTop = logElement.scrollHeight; }
+
+        startButton.addEventListener('click', async () => {
+            startButton.disabled = true; startButton.textContent = 'Sedang Memproses...';
+            if (SUPABASE_URL.includes("ANDA_DISINI")) { log('ERROR: Harap isi variabel di dalam kode uploader.html'); return; }
+            try {
+                const supabase = createClient(SUPABASE_URL, SUPABASE_KEY); log('Mulai memproses dokumen...');
+                const response = await fetch('./dokumen_perusahaan.txt');
+                if (!response.ok) throw new Error(`Gagal mengambil dokumen_perusahaan.txt`);
+                const text = await response.text();
+                const chunks = text.split('\n').filter(chunk => chunk.trim().length > 20);
+                log(`Dokumen dipecah menjadi ${chunks.length} bagian.`);
+                for (let i = 0; i < chunks.length; i++) {
+                    const chunk = chunks[i]; log(`Memproses bagian ${i + 1}/${chunks.length}...`);
+                    const embed_response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/text-embedding-004:embedContent?key=${GEMINI_KEY}`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ model: "models/text-embedding-004", content: { parts: [{ text: chunk }] } }) });
+                    if (!embed_response.ok) { const errorBody = await embed_response.json(); throw new Error(`Gemini API Error: ${errorBody.error.message}`); }
+                    const embed_json = await embed_response.json();
+                    const { error } = await supabase.from('documents').insert({ content: chunk, embedding: embed_json.embedding.values });
+                    if (error) throw error;
+                    log(`--> Bagian ${i + 1} berhasil diunggah.`);
+                }
+                log('\nSELESAI! Semua bagian dokumen telah berhasil diunggah.'); startButton.textContent = 'Proses Selesai';
+            } catch (err) { log(`\nERROR: ${err.message}`); startButton.disabled = false; startButton.textContent = 'Coba Lagi'; }
+        });
+    </script>
+</body>
+</html>
